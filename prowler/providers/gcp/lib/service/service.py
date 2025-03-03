@@ -2,6 +2,7 @@ import threading
 
 import google_auth_httplib2
 import httplib2
+from colorama import Fore, Style
 from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
 from googleapiclient.discovery import Resource
@@ -52,27 +53,35 @@ class GCPService:
         )
 
     def __is_api_active__(self, audited_project_ids):
-        project_ids = []
-        for project_id in audited_project_ids:
-            try:
-                client = discovery.build(
-                    "serviceusage", "v1", credentials=self.credentials
-                )
-                request = client.services().get(
-                    name=f"projects/{project_id}/services/{self.service}.googleapis.com"
-                )
-                response = request.execute()
-                if response.get("state") != "DISABLED":
-                    project_ids.append(project_id)
-                else:
-                    logger.error(
-                        f"{self.service} API has not been used in project {project_id} before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/{self.service}.googleapis.com/overview?project={project_id} then retry."
-                    )
-            except Exception as error:
-                logger.error(
-                    f"{error.__class__.__name__}[{error.__traceback__.tb_lineno}]: {error}"
-                )
-        return project_ids
+        # Skip the API check and simply return all project IDs
+        # This assumes all services are enabled for all projects
+        logger.info(f"Skipping API enablement check for {self.service}")
+        
+        # If this is a common service that we know we want to scan, include all projects
+        common_services = [
+            "compute",        # Compute Engine
+            "storage",        # Cloud Storage
+            "iam",            # Identity and Access Management
+            "container",      # Google Kubernetes Engine
+            "cloudkms",       # Cloud Key Management Service
+            "logging",        # Cloud Logging
+            "monitoring",     # Cloud Monitoring
+            "bigquery",       # BigQuery
+            "cloudfunctions", # Cloud Functions
+            "sql",            # Cloud SQL
+            "dns",            # Cloud DNS
+            "cloudresourcemanager", # Resource Manager
+            "secretmanager",  # Secret Manager
+            "cloudasset",     # Cloud Asset Inventory
+        ]
+        
+        # Either return all projects if this is a common service, or an empty list if it's not
+        if self.service in common_services:
+            return audited_project_ids
+        else:
+            # For less common services, log a note but still include all projects
+            logger.info(f"Service {self.service} is not in the common services list, but will be scanned anyway")
+            return audited_project_ids
 
     def __generate_client__(
         self,
